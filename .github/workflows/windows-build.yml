@@ -20,19 +20,21 @@ jobs:
       - name: Configure and Build
         shell: bash
         run: |
-          # 1. Находим путь к MinGW, который приехал вместе с Qt
+          # Находим родной MinGW от Qt
           MINGW_BIN_DIR="$(cygpath -u "$Qt6_Dir/../../Tools/mingw1120_64/bin")"
           
-          # 2. Очищаем PATH от системных компиляторов и добавляем нужный
-          export PATH="$MINGW_BIN_DIR:/usr/bin:/bin"
+          # Добавляем его в начало PATH, не удаляя системные пути (где cmake)
+          export PATH="$MINGW_BIN_DIR:$PATH"
           
-          # 3. Конфигурируем проект, явно указывая компиляторы
+          # Проверяем версии для контроля
+          g++ --version
+          cmake --version
+          
           cmake -B build -G "MinGW Makefiles" . \
-            -DCMAKE_CXX_COMPILER="$MINGW_BIN_DIR/g++.exe" \
-            -DCMAKE_C_COMPILER="$MINGW_BIN_DIR/gcc.exe" \
+            -DCMAKE_CXX_COMPILER="g++.exe" \
+            -DCMAKE_C_COMPILER="gcc.exe" \
             -DCMAKE_PREFIX_PATH="$Qt6_Dir"
             
-          # 4. Сборка
           cmake --build build --config Release
 
       - name: Prepare Deployment
@@ -40,17 +42,12 @@ jobs:
         run: |
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
           mkdir dist
-          
-          # Ищем скомпилированный exe и копируем
           $exeFile = Get-ChildItem -Path build/*.exe -Recurse | Select-Object -First 1
           if ($exeFile) {
             Copy-Item $exeFile.FullName -Destination dist/
-            Write-Host "Found EXE: $($exeFile.Name)"
-            
-            # Собираем DLL-ки
             windeployqt --dir dist "dist/$($exeFile.Name)"
           } else {
-            Write-Error "EXE file not found!"
+            Write-Error "EXE not found!"
             exit 1
           }
 
