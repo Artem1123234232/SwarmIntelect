@@ -16,28 +16,20 @@ jobs:
           arch: 'win64_mingw'
 
       - name: Configure and Build
-        shell: bash
+        shell: pwsh
         run: |
-          # 1. Ищем, куда на самом деле поставился MinGW 11.2.0
-          MINGW_EXE=$(find /d/a -name "g++.exe" | grep "1120" | head -n 1)
-          MINGW_BIN_DIR=$(dirname "$MINGW_EXE")
+          # 1. Берем путь к компилятору из папки инструментов Qt
+          $QtDir = "${{ env.Qt6_DIR }}"
+          $MingwPath = "$QtDir\..\..\Tools\mingw1120_64\bin"
           
-          # 2. Ищем путь к Qt6
-          QT_PATH=$(find /d/a -name "Qt6Config.cmake" | grep "mingw_64" | head -n 1 | xargs dirname | xargs dirname | xargs dirname)
+          # 2. Добавляем в PATH для текущей сессии
+          $env:PATH = "$MingwPath;$env:PATH"
           
-          echo "Found MinGW at: $MINGW_BIN_DIR"
-          echo "Found Qt at: $QT_PATH"
-
-          # 3. Конвертируем в Windows-формат
-          WIN_CXX=$(cygpath -w "$MINGW_EXE")
-          WIN_QT=$(cygpath -w "$QT_PATH")
-          WIN_MAKE=$(cygpath -w "$MINGW_BIN_DIR/mingw32-make.exe")
-
-          # 4. Сборка
-          cmake -B build -G "MinGW Makefiles" . \
-            -DCMAKE_CXX_COMPILER="$WIN_CXX" \
-            -DCMAKE_PREFIX_PATH="$WIN_QT" \
-            -DCMAKE_MAKE_PROGRAM="$WIN_MAKE"
+          # 3. Собираем, явно указывая компилятор
+          cmake -B build -G "MinGW Makefiles" . `
+            -DCMAKE_CXX_COMPILER="g++.exe" `
+            -DCMAKE_C_COMPILER="gcc.exe" `
+            -DCMAKE_PREFIX_PATH="$QtDir"
             
           cmake --build build --config Release
 
@@ -46,12 +38,12 @@ jobs:
         run: |
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
           mkdir dist
+          
           $exeFile = Get-ChildItem -Path build/*.exe -Recurse | Select-Object -First 1
           if ($exeFile) {
             Copy-Item $exeFile.FullName -Destination dist/
-            # Добавляем bin в PATH для windeployqt
-            $qtBin = (split-path (split-path $env:Qt6_DIR)) + "\bin"
-            $env:PATH = "$qtBin;" + $env:PATH
+            # Добавляем бинарники Qt в PATH для windeployqt
+            $env:PATH = "${{ env.Qt6_DIR }}\bin;" + $env:PATH
             windeployqt --dir dist "dist/$($exeFile.Name)"
           } else {
             Write-Error "EXE not found!"
