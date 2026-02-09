@@ -19,23 +19,25 @@ jobs:
 
       - name: Install MinGW 11.2
         run: |
-          # Устанавливаем конкретную версию MinGW, совместимую с Qt 6.7
           choco install mingw --version=11.2.0 -y --no-progress
 
       - name: Full Build and Deploy
         shell: pwsh
         run: |
-          # 1. Жестко задаем пути
+          # 1. Находим пути
           $MingwBin = "C:\ProgramData\chocolatey\lib\mingw\tools\install\mingw64\bin"
           $QtBin = "${{ env.Qt6_DIR }}\bin"
           
-          # Очищаем PATH, оставляя только наш MinGW и Qt
-          $env:PATH = "$MingwBin;$QtBin;C:\Windows\system32;C:\Windows"
+          # 2. ВОЗВРАЩАЕМ CMAKE В PATH (берем его из текущего PATH перед очисткой)
+          $CmakePath = Get-Command cmake | Select-Object -ExpandProperty Source | Split-Path
+          $env:PATH = "$MingwBin;$QtBin;$CmakePath;C:\Windows\system32;C:\Windows"
           
           Write-Host "Checking Compiler..."
-          g++ --version # ДОЛЖЕН БЫТЬ 11.2.0
+          g++ --version # Ожидаем 11.2.0
+          Write-Host "Checking CMake..."
+          cmake --version
           
-          # 2. Сборка
+          # 3. Сборка
           cmake -B build -G "MinGW Makefiles" . `
             -DCMAKE_CXX_COMPILER="$MingwBin\g++.exe" `
             -DCMAKE_C_COMPILER="$MingwBin\gcc.exe" `
@@ -44,7 +46,7 @@ jobs:
             
           cmake --build build --config Release
 
-          # 3. Деплой
+          # 4. Деплой
           New-Item -ItemType Directory -Path dist -Force
           $exeFile = Get-ChildItem -Path build -Filter "*.exe" -Recurse | Select-Object -First 1
           if ($exeFile) {
