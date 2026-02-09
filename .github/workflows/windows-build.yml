@@ -2,8 +2,6 @@ name: Windows Build
 on: 
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
 jobs:
   build:
@@ -19,24 +17,30 @@ jobs:
           version: '6.7.0'
           arch: 'win64_mingw'
 
-      - name: Setup MinGW
-        uses: egor-tensin/setup-mingw@v2
-        with:
-          platform: x64
-
       - name: Configure and Build
+        shell: bash
         run: |
+          # Добавляем путь к MinGW, который идет в комплекте с Qt
+          export PATH="$Qt6_Dir/../../Tools/mingw1120_64/bin:$PATH"
+          
           cmake -B build -G "MinGW Makefiles" .
           cmake --build build --config Release
 
       - name: Prepare Deployment
+        shell: pwsh
         run: |
           mkdir dist
-          # Копируем все найденные exe из папки build в dist
-          cp build/*.exe dist/
-          # Запускаем сборку зависимостей для первого найденного exe
+          # Копируем exe (ищем в папке build или build/Release)
+          Get-ChildItem -Path build/*.exe -Recurse | Copy-Item -Destination dist/
+          
+          # Запускаем windeployqt
           $exeFile = Get-ChildItem -Path dist/*.exe | Select-Object -First 1
-          windeployqt --dir dist $exeFile.FullName
+          if ($exeFile) {
+            windeployqt --dir dist $exeFile.FullName
+          } else {
+            Write-Error "EXE file not found in build directory!"
+            exit 1
+          }
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
