@@ -20,37 +20,41 @@ jobs:
       - name: Full Build and Deploy
         shell: pwsh
         run: |
-          # 1. Настраиваем пути к родному MinGW от Qt
-          $QtDir = "${{ env.Qt6_DIR }}"
-          $MingwBin = "$QtDir\..\..\Tools\mingw1120_64\bin"
-          $env:PATH = "$MingwBin;$QtDir\bin;$env:PATH"
+          # 1. Находим реальный путь к MinGW (иногда Tools лежит в другом месте)
+          $QtBaseDir = Split-Path (Split-Path "${{ env.Qt6_DIR }}" -Parent) -Parent
+          $MingwBin = Get-ChildItem -Path "$QtBaseDir\Tools" -Filter "g++.exe" -Recurse | Select-Object -First 1 | Select-Object -ExpandProperty DirectoryName
           
-          Write-Host "Using Compiler from: $MingwBin"
-          g++ --version # Проверяем, что теперь 11.2.0
+          if (-not $MingwBin) {
+              Write-Error "Could not find MinGW in $QtBaseDir"
+              exit 1
+          }
+
+          # 2. Очищаем PATH от системного мусора и ставим наш MinGW в самый перед
+          $env:PATH = "$MingwBin;$($env:Qt6_DIR)\bin;C:\Windows\system32;C:\Windows"
           
-          # 2. Конфигурируем и собираем
+          Write-Host "Real Mingw Path: $MingwBin"
+          g++ --version # Теперь ТУТ ОБЯЗАН БЫТЬ 11.2.0
+          
+          # 3. Конфигурируем (используем найденные пути)
           cmake -B build -G "MinGW Makefiles" . `
             -DCMAKE_CXX_COMPILER="$MingwBin\g++.exe" `
             -DCMAKE_C_COMPILER="$MingwBin\gcc.exe" `
             -DCMAKE_MAKE_PROGRAM="$MingwBin\mingw32-make.exe" `
-            -DCMAKE_PREFIX_PATH="$QtDir" `
+            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" `
             -DCMAKE_BUILD_TYPE="Release"
             
           cmake --build build --config Release
 
-          # 3. Подготовка папки с программой (Deploy)
+          # 4. Deploy
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
           New-Item -ItemType Directory -Path dist
           
-          $exeFile = Get-ChildItem -Path build/*.exe -Recurse | Select-Object -First 1
+          $exeFile = Get-ChildItem -Path build -Filter "*.exe" -Recurse | Select-Object -First 1
           if ($exeFile) {
               Copy-Item $exeFile.FullName -Destination dist\
-              Write-Host "Deploying: $($exeFile.Name)"
-              
-              # Запуск windeployqt
               windeployqt --dir dist "dist\$($exeFile.Name)"
           } else {
-              Write-Error "EXE not found!"
+              Write-Error "EXE not found after build!"
               exit 1
           }
 
