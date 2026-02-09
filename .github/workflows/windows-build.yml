@@ -1,5 +1,7 @@
 name: Windows Build
-on: [push]
+on: 
+  push:
+    branches: [ main ]
 
 jobs:
   build:
@@ -15,41 +17,43 @@ jobs:
           version: '6.7.0'
           arch: 'win64_mingw'
 
-      - name: Configure and Build
+      - name: Full Build and Deploy
         shell: pwsh
         run: |
-          # 1. Ищем, где реально лежит g++.exe
-          $Gxx = (Get-ChildItem -Path D:\a\ -Filter g++.exe -Recurse | Where-Object { $_.FullName -like "*mingw*" } | Select-Object -First 1).FullName
-          $MingwBin = Split-Path $Gxx
-          $Make = Join-Path $MingwBin "mingw32-make.exe"
+          # 1. Настраиваем пути к родному MinGW от Qt
+          $QtDir = "${{ env.Qt6_DIR }}"
+          $MingwBin = "$QtDir\..\..\Tools\mingw1120_64\bin"
+          $env:PATH = "$MingwBin;$QtDir\bin;$env:PATH"
           
-          Write-Host "Real Compiler Path: $Gxx"
-          Write-Host "Real Make Path: $Make"
-
-          # 2. Изолируем PATH
-          $env:PATH = "$MingwBin;${{ env.Qt6_DIR }}\bin;C:\Program Files\CMake\bin;C:\Windows\system32"
-
-          # 3. Сборка
+          Write-Host "Using Compiler from: $MingwBin"
+          g++ --version # Проверяем, что теперь 11.2.0
+          
+          # 2. Конфигурируем и собираем
           cmake -B build -G "MinGW Makefiles" . `
-            -DCMAKE_CXX_COMPILER="$Gxx" `
-            -DCMAKE_MAKE_PROGRAM="$Make" `
-            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" `
-            -DCMAKE_BUILD_TYPE=Release
+            -DCMAKE_CXX_COMPILER="$MingwBin\g++.exe" `
+            -DCMAKE_C_COMPILER="$MingwBin\gcc.exe" `
+            -DCMAKE_MAKE_PROGRAM="$MingwBin\mingw32-make.exe" `
+            -DCMAKE_PREFIX_PATH="$QtDir" `
+            -DCMAKE_BUILD_TYPE="Release"
             
           cmake --build build --config Release
 
-      - name: Prepare Deployment
-        shell: pwsh
-        run: |
+          # 3. Подготовка папки с программой (Deploy)
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
-          mkdir dist
+          New-Item -ItemType Directory -Path dist
+          
           $exeFile = Get-ChildItem -Path build/*.exe -Recurse | Select-Object -First 1
           if ($exeFile) {
-            Copy-Item $exeFile.FullName -Destination dist/
-            $env:PATH = "${{ env.Qt6_DIR }}\bin;" + $env:PATH
-            windeployqt --dir dist "dist/$($exeFile.Name)"
+              Copy-Item $exeFile.FullName -Destination dist\
+              Write-Host "Deploying: $($exeFile.Name)"
+              
+              # Запуск windeployqt
+              windeployqt --dir dist "dist\$($exeFile.Name)"
+          } else {
+              Write-Error "EXE not found!"
+              exit 1
           }
-          
+
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
