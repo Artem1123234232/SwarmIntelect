@@ -20,20 +20,19 @@ jobs:
       - name: Configure and Build
         shell: bash
         run: |
-          # Находим родной MinGW от Qt
-          MINGW_BIN_DIR="$(cygpath -u "$Qt6_Dir/../../Tools/mingw1120_64/bin")"
+          # Получаем ЧИСТЫЙ путь к компилятору Qt без системных примесей
+          COMPILER_PATH="${Qt6_Dir}/../../Tools/mingw1120_64/bin/g++.exe"
+          # Превращаем путь в формат Windows, который поймет CMake
+          WIN_COMPILER_PATH=$(cygpath -w "$COMPILER_PATH")
           
-          # Добавляем его в начало PATH, не удаляя системные пути (где cmake)
-          export PATH="$MINGW_BIN_DIR:$PATH"
+          echo "Using compiler: $WIN_COMPILER_PATH"
           
-          # Проверяем версии для контроля
-          g++ --version
-          cmake --version
-          
+          # Явно заставляем CMake использовать ТОЛЬКО этот файл
           cmake -B build -G "MinGW Makefiles" . \
-            -DCMAKE_CXX_COMPILER="g++.exe" \
-            -DCMAKE_C_COMPILER="gcc.exe" \
-            -DCMAKE_PREFIX_PATH="$Qt6_Dir"
+            -DCMAKE_CXX_COMPILER="$WIN_COMPILER_PATH" \
+            -DCMAKE_C_COMPILER="$(echo $WIN_COMPILER_PATH | sed 's/g++.exe/gcc.exe/')" \
+            -DCMAKE_PREFIX_PATH="$(cygpath -w "$Qt6_Dir")" \
+            -DCMAKE_MAKE_PROGRAM="$(cygpath -w "${Qt6_Dir}/../../Tools/mingw1120_64/bin/mingw32-make.exe")"
             
           cmake --build build --config Release
 
@@ -45,6 +44,8 @@ jobs:
           $exeFile = Get-ChildItem -Path build/*.exe -Recurse | Select-Object -First 1
           if ($exeFile) {
             Copy-Item $exeFile.FullName -Destination dist/
+            # Используем полный путь к windeployqt
+            $env:PATH = "${{ env.Qt6_DIR }}\bin;" + $env:PATH
             windeployqt --dir dist "dist/$($exeFile.Name)"
           } else {
             Write-Error "EXE not found!"
