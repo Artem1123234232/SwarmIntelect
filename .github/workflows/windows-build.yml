@@ -1,0 +1,45 @@
+name: Windows Build
+on: 
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.7.0'
+          arch: 'win64_mingw'
+
+      - name: Setup MinGW
+        uses: egor-tensin/setup-gcc@v1
+        with:
+          platform: x64
+
+      - name: Configure and Build
+        run: |
+          cmake -B build -G "MinGW Makefiles" ./GuiV
+          cmake --build build --config Release
+
+      - name: Prepare Deployment
+        run: |
+          # Создаем папку для отправки
+          mkdir dist
+          # Копируем экзешник
+          cp build/GuiV.exe dist/
+          # Собираем все зависимости Qt (DLL) в папку dist
+          windeployqt --dir dist dist/GuiV.exe
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PathFinder-Windows-Package
+          path: dist/
