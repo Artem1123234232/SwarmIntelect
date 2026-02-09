@@ -18,18 +18,23 @@ jobs:
       - name: Configure and Build
         shell: pwsh
         run: |
-          # 1. Берем путь к компилятору из папки инструментов Qt
-          $QtDir = "${{ env.Qt6_DIR }}"
-          $MingwPath = "$QtDir\..\..\Tools\mingw1120_64\bin"
-          
-          # 2. Добавляем в PATH для текущей сессии
-          $env:PATH = "$MingwPath;$env:PATH"
-          
-          # 3. Собираем, явно указывая компилятор
+          # 1. Жестко определяем пути
+          $QtBin = "${{ env.Qt6_DIR }}\bin"
+          $MingwPath = Join-Path (Split-Path (Split-Path ${{ env.Qt6_DIR }})) "Tools\mingw1120_64\bin"
+          $Gxx = "$MingwPath\g++.exe"
+          $Gcc = "$MingwPath\gcc.exe"
+          $Make = "$MingwPath\mingw32-make.exe"
+
+          # 2. Очищаем PATH от мешающих путей и ставим нужные в начало
+          $env:PATH = "$MingwPath;$QtBin;C:\Program Files\CMake\bin;C:\Windows\system32"
+
+          # 3. Сборка с ПРЯМЫМИ путями
           cmake -B build -G "MinGW Makefiles" . `
-            -DCMAKE_CXX_COMPILER="g++.exe" `
-            -DCMAKE_C_COMPILER="gcc.exe" `
-            -DCMAKE_PREFIX_PATH="$QtDir"
+            -DCMAKE_CXX_COMPILER="$Gxx" `
+            -DCMAKE_C_COMPILER="$Gcc" `
+            -DCMAKE_MAKE_PROGRAM="$Make" `
+            -DCMAKE_PREFIX_PATH="${{ env.Qt6_DIR }}" `
+            -DCMAKE_BUILD_TYPE=Release
             
           cmake --build build --config Release
 
@@ -38,11 +43,9 @@ jobs:
         run: |
           if (Test-Path dist) { Remove-Item -Recurse -Force dist }
           mkdir dist
-          
           $exeFile = Get-ChildItem -Path build/*.exe -Recurse | Select-Object -First 1
           if ($exeFile) {
             Copy-Item $exeFile.FullName -Destination dist/
-            # Добавляем бинарники Qt в PATH для windeployqt
             $env:PATH = "${{ env.Qt6_DIR }}\bin;" + $env:PATH
             windeployqt --dir dist "dist/$($exeFile.Name)"
           } else {
