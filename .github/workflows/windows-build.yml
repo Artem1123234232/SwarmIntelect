@@ -20,23 +20,23 @@ jobs:
           arch: 'win64_mingw'
 
       - name: Setup MinGW
-        uses: egor-tensin/setup-gcc@v1
+        uses: egor-tensin/setup-mingw@v2
         with:
           platform: x64
 
       - name: Configure and Build
         run: |
-          # Собираем из текущей папки (.), так как CMakeLists.txt здесь
           cmake -B build -G "MinGW Makefiles" .
           cmake --build build --config Release
 
       - name: Prepare Deployment
         run: |
           mkdir dist
-          # Копируем бинарник (проверь, чтобы имя совпало с тем, что в CMakeLists)
-          cp build/GuiV.exe dist/
-          # Собираем DLL-ки
-          windeployqt --dir dist dist/GuiV.exe
+          # Копируем все найденные exe из папки build в dist
+          cp build/*.exe dist/
+          # Запускаем сборку зависимостей для первого найденного exe
+          $exeFile = Get-ChildItem -Path dist/*.exe | Select-Object -First 1
+          windeployqt --dir dist $exeFile.FullName
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
