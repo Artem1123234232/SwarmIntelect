@@ -1,3 +1,6 @@
+set(CMAKE_CXX_COMPILER "g++")
+set(CMAKE_C_COMPILER "gcc")
+
 cmake_minimum_required(VERSION 3.16)
 
 project(GuiV VERSION 0.1 LANGUAGES CXX)
@@ -21,6 +24,14 @@ set(PROJECT_SOURCES
         mainwindow.ui
         ${TS_FILES}
 )
+
+# Устанавливаем стандарт C++20
+set(CMAKE_CXX_STANDARD 23)
+# Говорим, что это обязательное требование (если не потянет — вылетит с ошибкой)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Отключаем расширения компилятора (чтобы код был чистым стандартом)
+set(CMAKE_CXX_STANDARD_EXTENSIONS OFF)
+
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(GuiV

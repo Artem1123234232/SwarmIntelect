@@ -3,9 +3,7 @@
 #define PunctRadius 15
 #define BotRadius 5
 #define VolumeRadius 50
-#define BotCount 500
-#define ScoutBotCount 200
-#define EliteBotCount 300
+#define MaxBotCount 333 // Максимальное количество ботов одного типа
 #define ScoutBotID 2
 #define EliteBotID 1
 #define NormalBotID 0
@@ -15,7 +13,10 @@
 #include <QPainter>
 #include <random>
 #include <cmath>
-const float PI = std::acos(-1.0f);
+#include <numbers>
+#include <ranges>
+#include <span>
+constexpr float PI = std::numbers::pi_v<float>;
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -137,14 +138,53 @@ struct World {
     Vec2 Size=Vec2(300,300);
     Vec2 A=Vec2(50,100);
     Vec2 B=Vec2(250,50);
-    Bot BotList[BotCount];
+    Bot BotListNormal[MaxBotCount];
+    Bot BotListElite[MaxBotCount];
+    Bot BotListScout[MaxBotCount];
+    int NormalBotCount=0;
+    int EliteBotCount=300;
+    int ScoutBotCount=200;
     bool start=true;
     int time = 0;
-    const int clock=1;
+    int odraw = 0;
+    int clock=16;
     bool tick(std::mt19937 &gen){
+        auto groups = {
+            std::span(BotListNormal).subspan(0, std::min((size_t)NormalBotCount, (size_t)std::size(BotListNormal))),
+            std::span(BotListScout).subspan(0, std::min((size_t)ScoutBotCount, (size_t)std::size(BotListScout))),
+            std::span(BotListElite).subspan(0, std::min((size_t)EliteBotCount, (size_t)std::size(BotListElite)))
+        };
+        auto groupsNS = {
+            std::span(BotListNormal).subspan(0, std::min((size_t)NormalBotCount, (size_t)std::size(BotListNormal))),
+            std::span(BotListElite).subspan(0, std::min((size_t)EliteBotCount, (size_t)std::size(BotListElite)))
+        };
         if(start){
-            int v=BotCount-EliteBotCount-ScoutBotCount;
-            int countSide = std::sqrt(ScoutBotCount);
+            std::mt19937 localGen(338877028838);
+            std::uniform_real_distribution<float> angleDist(0, 2 * PI);
+            std::uniform_real_distribution<float> posDistX(0, Size.x-1);
+            std::uniform_real_distribution<float> posDistY(0, Size.y-1);
+            for (auto& BotI : BotListNormal) {
+                BotI.reset();
+                BotI.type=NormalBotID;
+                BotI.dis = Vec2(Size.x,Size.y);
+                BotI.angle = angleDist(localGen);
+                BotI.pos = Vec2(posDistX(localGen),posDistY(localGen));
+            }
+            for (auto& BotI : BotListScout) {
+                BotI.reset();
+                BotI.type=ScoutBotID;
+                BotI.dis = Vec2(Size.x,Size.y);
+                BotI.angle = angleDist(localGen);
+                BotI.pos = Vec2(posDistX(localGen),posDistY(localGen));
+            }
+            for (auto& BotI : BotListElite) {
+                BotI.reset();
+                BotI.type=EliteBotID;
+                BotI.dis = Vec2(Size.x,Size.y);
+                BotI.angle = angleDist(localGen);
+                BotI.pos = Vec2(posDistX(localGen),posDistY(localGen));
+            }
+            /*int countSide = std::sqrt(ScoutBotCount);
             if (countSide == 0) countSide = 1;
 
             // 2. Считаем шаг между ботами
@@ -153,36 +193,42 @@ struct World {
 
             // Расставляем разведчиков
             for (int i = 0; i < ScoutBotCount; i++) {
-                int idx = i + v;
+                BotList[i].type = ScoutBotID;
+                BotList[i].pos = Vec2(int(i%countSide)*stepX, int(i/countSide)*stepY);
+                BotList[i].dis = Vec2(Size.x,Size.y);
 
-                BotList[idx].type = ScoutBotID;
-                BotList[idx].pos = Vec2(int(i%countSide)*stepX, int(i/countSide)*stepY);
-                BotList[idx].dis = Vec2(Size.x,Size.y);
-
-                unsigned int seed = static_cast<unsigned int>(BotList[idx].pos.x) * 73856093 ^ static_cast<unsigned int>(BotList[idx].pos.y) * 19349663;
+                unsigned int seed = static_cast<unsigned int>(BotList[i].pos.x) * 73856093 ^ static_cast<unsigned int>(BotList[i].pos.y) * 19349663;
                 // 2. Создаем временный генератор специально для этого бота
                 std::mt19937 localGen(seed);
                 std::uniform_real_distribution<float> angleDist(0, 2 * PI);
                 // 3. Угол теперь зависит только от позиции
-                BotList[idx].angle = angleDist(localGen);
+                BotList[i].angle = angleDist(localGen);
             }
-            for (int i=0;i<EliteBotCount;i++){BotList[i+v+ScoutBotCount].type=EliteBotID;BotList[i+v+ScoutBotCount].pos=A;BotList[i+v+ScoutBotCount].colision=true;BotList[i+v+ScoutBotCount].angle=atan2(A.y-B.y,A.x-B.x)+PI;}
+            for (int i=0;i<EliteBotCount;i++){
+                BotList[i+ScoutBotCount].type=EliteBotID;
+                BotList[i+ScoutBotCount].pos=A;
+                BotList[i+ScoutBotCount].colision=true;
+                BotList[i+ScoutBotCount].angle=atan2(A.y-B.y,A.x-B.x)+PI;
+            }*/
             start=false;
         }
-        //A.y=(sin(float(time)/1000.0f)+1)/2*Size.y;
-        for (int i=0;i<BotCount;i++){
-            BotList[i].step(gen,Size);
-            BotList[i].collision(A,B);
-            for (int j=0;j<BotCount;j++){
-                if (BotList[j].type!=ScoutBotID){
-                    for (int g=0;g<2;g++){
-                        float dx=BotList[i].pos.x-BotList[j].pos.x;
-                        float dy=BotList[i].pos.y-BotList[j].pos.y;
-                        if(dx*dx+dy*dy<VolumeRadius*VolumeRadius){
-                            float v=BotList[i].dis[g]+VolumeRadius;
-                            if(BotList[j].dis[g]>v){
-                                BotList[j].dis[g]=v;
-                                if(BotList[j].go==g){BotList[j].angle=atan2(dy,dx);}
+        A.y=(sin(float(time)/1000.0f)+1)/2*Size.y;
+        for (auto groupI : groups) {
+            for (auto& BotI : groupI) {
+
+                BotI.step(gen,Size);
+                BotI.collision(A,B);
+                for (auto groupJ : groupsNS) {
+                    for (auto& BotJ : groupJ) {
+                        for (int g=0;g<2;g++){
+                            float dx=BotI.pos.x-BotJ.pos.x;
+                            float dy=BotI.pos.y-BotJ.pos.y;
+                            if(dx*dx+dy*dy<VolumeRadius*VolumeRadius){
+                                float v=BotI.dis[g]+VolumeRadius;
+                                if(BotJ.dis[g]>v){
+                                    BotJ.dis[g]=v;
+                                    if(BotJ.go==g){BotJ.angle=atan2(dy,dx);}
+                                }
                             }
                         }
                     }
@@ -190,24 +236,30 @@ struct World {
             }
         }
         time+=clock;
-        return(time%16==0);
+        if(time-odraw>=16){odraw=time;return(true);}
+        return(false);
     }
     void reset(){
-        for (int i=0;i<BotCount;i++){
-            BotList[i].reset();
-        }
         time=0;
+        odraw=0;
         start=true;
     }
     void draw(QPainter &painter){
+        auto groups = {
+            std::span(BotListNormal).subspan(0, std::min((size_t)NormalBotCount, (size_t)std::size(BotListNormal))),
+            std::span(BotListScout).subspan(0, std::min((size_t)ScoutBotCount, (size_t)std::size(BotListScout))),
+            std::span(BotListElite).subspan(0, std::min((size_t)EliteBotCount, (size_t)std::size(BotListElite)))
+        };
         painter.setBrush(Qt::white);
         painter.drawRect(0,0,Size.x,Size.y);
         painter.setBrush(Qt::green);
         painter.drawEllipse(A.x-PunctRadius, A.y-PunctRadius, PunctRadius*2, PunctRadius*2);
         painter.setBrush(Qt::blue);
         painter.drawEllipse(B.x-PunctRadius, B.y-PunctRadius, PunctRadius*2, PunctRadius*2);
-        for (int i=0;i<BotCount;i++){
-            BotList[i].draw(painter);
+        for (auto groupI : groups) {
+            for (auto& BotI : groupI) {
+                BotI.draw(painter);
+            }
         }
     }
 };
@@ -227,6 +279,14 @@ private:
     Ui::MainWindow *ui;
 private slots:
     void nextStep();   // Метод для расчетов симуляции
+    void on_ClockSlider_valueChanged(int value);
+
+    void on_BotCountSlider_valueChanged(int value);
+
+    void on_ScoutCountSlider_valueChanged(int value);
+
+    void on_EliteCountSlider_valueChanged(int value);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;

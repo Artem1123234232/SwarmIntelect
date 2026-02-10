@@ -2,3 +2,5 @@ build/
 .qtc/
 *.user
 CMakeLists.txt.user
+shell.nix
+shell.sh
