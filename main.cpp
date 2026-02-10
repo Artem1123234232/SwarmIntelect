@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QLocale>
 #include <QTranslator>
+#include <QProxyStyle>
 
 int main(int argc, char *argv[])
 {
@@ -17,6 +18,8 @@ int main(int argc, char *argv[])
             break;
         }
     }
+    qApp->setStyleSheet("QSlider::sub-page:horizontal { background: #2196f3; }");
+    QApplication::setStyle("Fusion");
     MainWindow w;
     w.show();
     return a.exec();
